@@ -18,18 +18,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 
 
 /*  Global constants  */
 
 #define MAX_LINE           (1000)
+#define SEGMENT_SIZE       (20)
+#define HEADER_SIZE        (6)
 
 
 /*  Function declarations  */
 
 int ParseCmdLine(int argc, char *argv[], char **szAddress, char **szPort, char **read_file, char** type, char** server_file, float* loss_probability, int* random_seed);
 
-void readFromFile(char* buffer, char* read_file);
+int readFromFile(char* buffer, char* read_file);
+
+char* make_pkt(char* seq, int* payload_size, char* pkt_serial, char* data);
 
 /*  Error handling function. */
 
@@ -58,10 +63,18 @@ int main(int argc, char *argv[]) {
     char     *server_file;           /*  file name to be saved at server  */
     int      random_seed;            /*  random seed  */
     float    loss_probability;       /*  loss probability */
+
     
 
-    int len_servaddr;
-    int n;
+    int     len_servaddr;
+    int     n;
+    int     len_of_file;
+    int     no_of_udp_segemnts;
+    int     seq_num;
+    char    state;
+    int     i;
+    int     payload_size;
+    char    pkt_serial;
  
     if (argc != 8) {
         print_error_and_exit("Invalid arguments!");
@@ -114,7 +127,45 @@ int main(int argc, char *argv[]) {
     */
 
 
-    readFromFile(buffer, read_file);
+    len_of_file = readFromFile(buffer, read_file);
+
+    no_of_udp_segemnts = (int) ceil((1.0*len_of_file) / SEGMENT_SIZE);
+
+    printf("%d\n", len_of_file);
+
+    state = '0';
+    i = 0;
+
+    while (i < no_of_udp_segemnts) {
+
+        if (i == no_of_udp_segemnts-1) {
+            payload_size = len_of_file-i*SEGMENT_SIZE;
+            pkt_serial = '1';
+        }
+        else {
+            payload_size = SEGMENT_SIZE;
+            pkt_serial = '0';
+        }
+
+        char* payload = (char*) malloc(payload_size);
+        memcpy(payload, buffer+i*SEGMENT_SIZE, payload_size);
+
+        char* sndpkt = make_pkt(&state, &payload_size, &pkt_serial, payload);
+
+        int len = payload_size+HEADER_SIZE;
+
+        if ((n = sendto(conn_s, sndpkt, len, 0, (struct sockaddr *)&servaddr, sizeof(servaddr))) < 0) 
+        {
+            print_error_and_exit("sending");
+        } 
+
+        i++; 
+
+        free(payload);
+        free(sndpkt);
+    }
+
+
 
     /*  Get string to echo from user  */
 
@@ -138,13 +189,23 @@ int main(int argc, char *argv[]) {
 
     /*  Output echoed string  */
 
-    printf("Echo response: %s", buffer);
+    //printf("Echo response: %s", buffer);
 
     return EXIT_SUCCESS;
 }
 
+char* make_pkt(char* seq, int* payload_size, char* pkt_serial, char* data) {
+    char* packet = (char*) malloc(SEGMENT_SIZE+HEADER_SIZE);
+    memcpy(packet, seq, 1);
+    memcpy(packet+1, payload_size, 4);
+    memcpy(packet+5, pkt_serial, 1);
+    memcpy(packet+6, data, *payload_size);
 
-void readFromFile(char* buffer, char* read_file) {
+    return packet;
+}
+
+
+int readFromFile(char* buffer, char* read_file) {
 
     FILE *ptr;
     unsigned char read_buffer[1];
@@ -171,7 +232,7 @@ void readFromFile(char* buffer, char* read_file) {
         count += 1;
     }
 
-    //printf("%d\n", lengthOfFile);
+    return lengthOfFile;
 }
 
 

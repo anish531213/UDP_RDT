@@ -23,9 +23,13 @@
 
 #define ECHO_PORT          (2002)
 #define MAX_LINE           (1000)
+#define SEGMENT_SIZE       (20)
+#define HEADER_SIZE        (6)
 
 
 /*  Error handling function. */
+
+void writeToFile(char* buffer, int length);
 
 void print_error_and_exit(char *msg)
 {
@@ -46,6 +50,7 @@ int main(int argc, char *argv[]) {
     int n;
     float loss_probability;
     int random_seed;
+    char rcv_buffer[SEGMENT_SIZE+HEADER_SIZE];
 
     /*  Get port number from the command line, and
         set to default port if no arguments were supplied  */
@@ -99,12 +104,18 @@ int main(int argc, char *argv[]) {
 	// exit(EXIT_FAILURE);
  //    }
 
+    char status = '0';
+    
+    int payload_size;
 
+    char* rcv_data = (char*) malloc(10);
+    char* rcv_ptr = rcv_data;
+    int i = 0;
     
     /*  Enter an infinite loop to respond
         to client requests and echo input  */
 
-    while ( 1 ) {
+    while ( status != '1' ) {
 
 	/*  Wait for a connection, then accept() it  
 
@@ -117,12 +128,27 @@ int main(int argc, char *argv[]) {
 
 	/*  Retrieve an input line from the connected socket
 	    then simply write it back to the same socket.     */
+    
+    
 
-	if ((n = recvfrom(list_s, buffer, MAX_LINE, 0, (struct sockaddr *)&servaddr, &len_servaddr) > 0)) {
-        printf("%s", buffer);
+	if ((n = recvfrom(list_s, rcv_buffer, SEGMENT_SIZE+HEADER_SIZE, 0, (struct sockaddr *)&servaddr, &len_servaddr) > 0)) {
+        memcpy(&payload_size, rcv_buffer+1, 4);
+        printf("Payload size: %d,  i: %d\n", payload_size, i);
+        rcv_data = (char*) realloc(rcv_data, i+payload_size);
+
+        rcv_ptr = rcv_data+i;
+
+        memcpy(rcv_ptr, rcv_buffer+6, payload_size);
+
+        memcpy(&status, rcv_buffer+5, 1);
+
+        printf("Status: %c\n", status);
+
+        i += payload_size;
     }
 
 
+    
 
 	/*  Close the connected socket  */
 
@@ -130,4 +156,49 @@ int main(int argc, char *argv[]) {
 	//     print_error_and_exit("Closing connection");
 	// }
     }
+
+    printf("Total data size: %d\n", i);
+
+    writeToFile(rcv_data, i);
+
+    // for (int j=0; j<i; j++) {
+    //     printf("%c\n", rcv_data[j]);
+    // }
+
+    if ( close(conn_s) < 0 ) {
+        print_error_and_exit("Closing connection");
+    }
+}
+
+
+
+void writeToFile(char* buffer, int length) {
+
+    FILE *ptr;
+    // unsigned char write_buffer[1];
+
+    ptr=fopen("target","wb");                      // Reading file in binary
+
+    /*  If error in reading file  */
+
+    if (!ptr) { 
+        print_error_and_exit("Unable to open file!");     
+    }
+
+    /*  Checking the file length if it doesn't exceed 1000 bytes  */
+
+    // fseek(ptr, 0, SEEK_END);
+    // int lengthOfFile = ftell(ptr);
+    // rewind(ptr);
+
+    fwrite(buffer, length, 1, ptr);
+
+    // int count = 0;
+
+    // while (fread(read_buffer,sizeof(read_buffer),1,ptr) != 0) {
+    //     // Saving the file buffer into data array
+    //     buffer[count] = read_buffer[0];
+    //     count += 1;
+    // }
+
 }
