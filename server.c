@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include "sendlib.c"
 
 /*  Global constants  */
 
@@ -104,7 +105,8 @@ int main(int argc, char *argv[]) {
 	// exit(EXIT_FAILURE);
  //    }
 
-    char status = '0';
+    char seq_num;
+    char pkt_serial = '0';
     
     int payload_size;
 
@@ -115,7 +117,7 @@ int main(int argc, char *argv[]) {
     /*  Enter an infinite loop to respond
         to client requests and echo input  */
 
-    while ( status != '1' ) {
+    while ( 1 ) {
 
 	/*  Wait for a connection, then accept() it  
 
@@ -133,16 +135,24 @@ int main(int argc, char *argv[]) {
 
 	if ((n = recvfrom(list_s, rcv_buffer, SEGMENT_SIZE+HEADER_SIZE, 0, (struct sockaddr *)&servaddr, &len_servaddr) > 0)) {
         memcpy(&payload_size, rcv_buffer+1, 4);
-        printf("Payload size: %d,  i: %d\n", payload_size, i);
+        // printf("Payload size: %d,  i: %d\n", payload_size, i);
         rcv_data = (char*) realloc(rcv_data, i+payload_size);
 
         rcv_ptr = rcv_data+i;
 
+        memcpy(&seq_num, rcv_buffer, 1);
         memcpy(rcv_ptr, rcv_buffer+6, payload_size);
 
-        memcpy(&status, rcv_buffer+5, 1);
+        memcpy(&pkt_serial, rcv_buffer+5, 1);
 
-        printf("Status: %c\n", status);
+        printf("Packet %c received \n", seq_num);
+
+        
+        if ((n = lossy_sendto(loss_probability, random_seed, list_s, &seq_num, 1, (struct sockaddr *)&servaddr, sizeof(servaddr))) < 0) 
+        {
+            print_error_and_exit("Error sending ACK");
+        } 
+        //printf("ACK %c sent\n", seq_num);
 
         i += payload_size;
     }

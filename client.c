@@ -19,13 +19,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
-
+#include <netdb.h>
+#include "sendlib.c"
 
 /*  Global constants  */
 
 #define MAX_LINE           (1000)
 #define SEGMENT_SIZE       (20)
 #define HEADER_SIZE        (6)
+#define TIMEOUT            (500000)       //50 millisecond
 
 
 /*  Function declarations  */
@@ -75,6 +77,7 @@ int main(int argc, char *argv[]) {
     int     i;
     int     payload_size;
     char    pkt_serial;
+    char    ack;
  
     if (argc != 8) {
         print_error_and_exit("Invalid arguments!");
@@ -131,10 +134,19 @@ int main(int argc, char *argv[]) {
 
     no_of_udp_segemnts = (int) ceil((1.0*len_of_file) / SEGMENT_SIZE);
 
-    printf("%d\n", len_of_file);
+    // printf("%d\n", len_of_file);
 
     state = '0';
     i = 0;
+
+    struct timeval timer;
+        //setting description set
+       
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+
+    FD_SET(conn_s, &read_fds);
+
 
     while (i < no_of_udp_segemnts) {
 
@@ -154,15 +166,69 @@ int main(int argc, char *argv[]) {
 
         int len = payload_size+HEADER_SIZE;
 
-        if ((n = sendto(conn_s, sndpkt, len, 0, (struct sockaddr *)&servaddr, sizeof(servaddr))) < 0) 
+        printf("Sending Packet with seq %c\n", state);
+        
+        
+
+
+        if ((n = lossy_sendto(loss_probability, random_seed, conn_s, sndpkt, len, (struct sockaddr *)&servaddr, sizeof(servaddr))) < 0) 
         {
             print_error_and_exit("sending");
         } 
 
-        i++; 
+        /*   
+            TIMER.  
 
+        */
+
+       
+
+        timer.tv_sec = 0;
+        timer.tv_usec = TIMEOUT;
+
+        int status;
+        status = select(conn_s+1, &read_fds, NULL, NULL, &timer);
+        if (status == -1){
+            print_error_and_exit("select ");
+        } else if(status == 0){
+
+            printf("Timeout! Retrasmitting...\n");
+            FD_SET(conn_s, &read_fds);
+            // Timeout Happens
+            // retransmit the packet
+            // int send;
+            // if((send = udt_send(fd, pkt, length+4, 0)) == -1){
+            //     perror("send");
+            // }
+            // printf("Retrans msg of size%d, seq#=%c\n", length+4, pkt[1]);
+            // FD_SET(fd, &read_fds);
+            free(payload);
+            free(sndpkt);
+            continue;
+        }
+
+        /*  ------------------  */
+
+
+        if ((n = recvfrom(conn_s, &ack, 1, 0, 0, 0)) < 0) 
+        {
+            print_error_and_exit("error receiving ACK");
+        } 
+
+        // printf("%c\n", ack);
+
+        if (ack == state) {
+            printf("ACK%c received \n", ack);
+            if (state == '0')
+                state = '1';
+            else
+                state = '0';
+            i++;
+        }   
+         
         free(payload);
         free(sndpkt);
+        
     }
 
 
