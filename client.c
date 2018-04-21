@@ -68,19 +68,22 @@ int main(int argc, char *argv[]) {
 
     
 
-    int     len_servaddr;
-    int     n;
-    int     len_of_file;
-    int     no_of_udp_segemnts;
-    int     seq_num;
-    char    state;
+    int     len_servaddr;            /*  servaddr size.            */
+    int     n;                       
+    int     len_of_file;             /*  length of file to send.   */
+    int     no_of_udp_segemnts;      /*  total no. of segment.     */
+    int     seq_num;                 /*  holds sequence number.    */
+    char    state;                   /*  holds state.              */
     int     i;
-    int     payload_size;
-    char    pkt_serial;
-    char    ack;
-    int     len;
-    char*   payload;
+    int     payload_size;            /*  payload size              */
+    char    pkt_serial;              /*  holds packet serial.      */
+    char    ack;                     /*  holds ack                 */
+    int     len;                     /*  holds len                 */
+    char*   payload;                 /*  holds payload             */
  
+
+    /*  If all command line are not present. */
+
     if (argc != 8) {
         print_error_and_exit("Invalid arguments!");
     }
@@ -88,6 +91,8 @@ int main(int argc, char *argv[]) {
     /*  Get command line arguments  */
 
     ParseCmdLine(argc, argv, &szAddress, &szPort, &read_file, &type, &server_file, &loss_probability, &random_seed);
+
+    /*  error if loss probability is not between 0 and 1. */
 
     if (loss_probability>1 || loss_probability<=0) {
         print_error_and_exit("loss probability must be between 0 and 1");
@@ -100,7 +105,6 @@ int main(int argc, char *argv[]) {
 	   print_error_and_exit("Invalid port.");
     }
 	
-
     /*  Create the listening socket  */
 
     if ( (conn_s = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
@@ -131,58 +135,49 @@ int main(int argc, char *argv[]) {
 
     */
 
+    /*  reading from the file to the buffer.  */
 
     len_of_file = readFromFile(buffer, read_file);
 
+    /*  no. of segemnts to be constructed. */
+
     no_of_udp_segemnts = (int) ceil((1.0*len_of_file) / SEGMENT_SIZE);
 
-    // printf("%d\n", len_of_file);
+    /*  Inital state. */
 
     state = '0';
     i = -1;
 
+    /*  Setting timer. */
+
     struct timeval timer;
-        //setting description set
+    
+    /*  setting description set. */
        
     fd_set read_fds;
     FD_ZERO(&read_fds);
 
     FD_SET(conn_s, &read_fds);
 
-
-    // while (i < 0) {
-    //     int len_serv_file = strlen(server_file);
-
-    //     pkt_serial = 'i';
-
-    //     payload_size = len_serv_file+5;
-    //     char* payload = (char*) malloc(payload_size);
-    //     memcpy(payload, type, 1);
-    //     memcpy(payload+1, len_serv_file, 4);
-    //     memcpy(payload+5, server_file, len_serv_file);
-
-    //     char* sndpkt = make_pkt(&state, &payload_size, &pkt_serial, payload);
-
-    //     len = payload_size+HEADER_SIZE;
-
-    //     printf("%s\n", );
-
-    //     i++;
-    // }
-
-
+    /*  while ack received all segemnts and arguments not sent. */
 
     while (i < no_of_udp_segemnts) {
+
+        /*  setting up payload size and pkt serial for last packet. */
 
         if (i == no_of_udp_segemnts-1) {
             payload_size = len_of_file-i*SEGMENT_SIZE;
             pkt_serial = '1';
         }
+
+        /*. setting up payload size and packet serial for other packets. */
+
         else {
             payload_size = SEGMENT_SIZE;
             pkt_serial = '0';
         }
 
+        /*  creating payload for command line arguments. */
 
         if (i < 0) {
             int len_serv_file = strlen(server_file);
@@ -196,19 +191,24 @@ int main(int argc, char *argv[]) {
             memcpy(payload+5, server_file, len_serv_file);
         }
 
+        /*  creating payload for file data. */
+
         else {
             payload = (char*) malloc(payload_size);
             memcpy(payload, buffer+i*SEGMENT_SIZE, payload_size);
         }
+
+        /*  creating packets  */
         
         char* sndpkt = make_pkt(&state, &payload_size, &pkt_serial, payload);
+
+        /*  packet size. */
 
         len = payload_size+HEADER_SIZE;
 
         printf("Sending Packet with seq %c\n", state);
         
-        
-
+        /*  Unreliable send using lossy sendto. */
 
         if ((n = lossy_sendto(loss_probability, random_seed, conn_s, sndpkt, len, (struct sockaddr *)&servaddr, sizeof(servaddr))) < 0) 
         {
@@ -227,32 +227,38 @@ int main(int argc, char *argv[]) {
         status = select(conn_s+1, &read_fds, NULL, NULL, &timer);
         if (status == -1){
             print_error_and_exit("select ");
-        } else if(status == 0){
 
+        /* Timeout : if ack not received for the packet */
+
+        } else if(status == 0){
             printf("Timeout! Retrasmitting...\n");
             FD_SET(conn_s, &read_fds);
-            // Timeout Happens
-            // retransmit the packet
-            // int send;
-            // if((send = udt_send(fd, pkt, length+4, 0)) == -1){
-            //     perror("send");
-            // }
-            // printf("Retrans msg of size%d, seq#=%c\n", length+4, pkt[1]);
-            // FD_SET(fd, &read_fds);
             free(payload);
             free(sndpkt);
-            continue;
+            continue;   /* If timeout continue again. */
         }
 
         /*  ------------------  */
 
+        /*  recvfrom for receiving ack. */ 
 
         if ((n = recvfrom(conn_s, &ack, 1, 0, 0, 0)) < 0) 
         {
             print_error_and_exit("error receiving ACK");
         } 
 
+        /*  If the status packet get succes or failure  */
+
         // printf("%c\n", ack);
+        if (ack == 's' || ack == 'f') {
+            if (ack == 's')
+                printf("Format Success\n");
+            else 
+                printf("Format Error\n");
+            i++;
+        }
+
+        /*  If the same ack is back for the packet sent  */
 
         if (ack == state) {
             printf("ACK%c received \n", ack);
@@ -260,42 +266,18 @@ int main(int argc, char *argv[]) {
                 state = '1';
             else
                 state = '0';
-            i++;
+            i++;   // Continue to next packet
         }   
          
-        free(payload);
-        free(sndpkt);
+        free(payload);  /* free payload. */
+        free(sndpkt);   /* free packet. */
         
     }
 
-
-
-    /*  Get string to echo from user  */
-
-    // printf("Enter the string to echo: ");
-    // fgets(buffer, MAX_LINE, stdin);
-
-    // // printf("%lu\n", strlen(buffer));
-
-    // int len = strlen(buffer);
-
-    // if ((n = sendto(conn_s, buffer, len, 0, (struct sockaddr *)&servaddr, sizeof(servaddr))) < 0) 
-    // {
-    //     print_error_and_exit("sending");
-    // }  
-
-    /*  Send string to echo server, and retrieve response  */
-
-    // Writeline(conn_s, buffer, strlen(buffer));
-    // Readline(conn_s, buffer, MAX_LINE-1);
-
-
-    /*  Output echoed string  */
-
-    //printf("Echo response: %s", buffer);
-
     return EXIT_SUCCESS;
 }
+
+/*  Make packet function for making packet from header info and payload. */
 
 char* make_pkt(char* seq, int* payload_size, char* pkt_serial, char* data) {
     char* packet = (char*) malloc(SEGMENT_SIZE+HEADER_SIZE);
@@ -307,6 +289,7 @@ char* make_pkt(char* seq, int* payload_size, char* pkt_serial, char* data) {
     return packet;
 }
 
+/*  FUnction to read file into a buffer. */
 
 int readFromFile(char* buffer, char* read_file) {
 
@@ -338,6 +321,8 @@ int readFromFile(char* buffer, char* read_file) {
     return lengthOfFile;
 }
 
+
+/*  function to parse command line arguments. */
 
 int ParseCmdLine(int argc, char *argv[], char **szAddress, char **szPort, char **read_file, char** type, char** server_file, float* loss_probability, int* random_seed) {
 
