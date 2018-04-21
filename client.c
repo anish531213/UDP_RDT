@@ -78,6 +78,8 @@ int main(int argc, char *argv[]) {
     int     payload_size;
     char    pkt_serial;
     char    ack;
+    int     len;
+    char*   payload;
  
     if (argc != 8) {
         print_error_and_exit("Invalid arguments!");
@@ -137,7 +139,7 @@ int main(int argc, char *argv[]) {
     // printf("%d\n", len_of_file);
 
     state = '0';
-    i = 0;
+    i = -1;
 
     struct timeval timer;
         //setting description set
@@ -146,6 +148,28 @@ int main(int argc, char *argv[]) {
     FD_ZERO(&read_fds);
 
     FD_SET(conn_s, &read_fds);
+
+
+    // while (i < 0) {
+    //     int len_serv_file = strlen(server_file);
+
+    //     pkt_serial = 'i';
+
+    //     payload_size = len_serv_file+5;
+    //     char* payload = (char*) malloc(payload_size);
+    //     memcpy(payload, type, 1);
+    //     memcpy(payload+1, len_serv_file, 4);
+    //     memcpy(payload+5, server_file, len_serv_file);
+
+    //     char* sndpkt = make_pkt(&state, &payload_size, &pkt_serial, payload);
+
+    //     len = payload_size+HEADER_SIZE;
+
+    //     printf("%s\n", );
+
+    //     i++;
+    // }
+
 
 
     while (i < no_of_udp_segemnts) {
@@ -159,12 +183,27 @@ int main(int argc, char *argv[]) {
             pkt_serial = '0';
         }
 
-        char* payload = (char*) malloc(payload_size);
-        memcpy(payload, buffer+i*SEGMENT_SIZE, payload_size);
 
+        if (i < 0) {
+            int len_serv_file = strlen(server_file);
+
+            pkt_serial = 'i';
+
+            payload_size = len_serv_file+5;
+            payload = (char*) malloc(payload_size);
+            memcpy(payload, type, 1);
+            memcpy(payload+1, &len_serv_file, 4);
+            memcpy(payload+5, server_file, len_serv_file);
+        }
+
+        else {
+            payload = (char*) malloc(payload_size);
+            memcpy(payload, buffer+i*SEGMENT_SIZE, payload_size);
+        }
+        
         char* sndpkt = make_pkt(&state, &payload_size, &pkt_serial, payload);
 
-        int len = payload_size+HEADER_SIZE;
+        len = payload_size+HEADER_SIZE;
 
         printf("Sending Packet with seq %c\n", state);
         
@@ -180,8 +219,6 @@ int main(int argc, char *argv[]) {
             TIMER.  
 
         */
-
-       
 
         timer.tv_sec = 0;
         timer.tv_usec = TIMEOUT;

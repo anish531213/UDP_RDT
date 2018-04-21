@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "sendlib.c"
+#include "helper.h"
 
 /*  Global constants  */
 
@@ -30,7 +31,7 @@
 
 /*  Error handling function. */
 
-void writeToFile(char* buffer, int length);
+void convertAndWriteToFile(unsigned char* data, int length, char* filename, char type);
 
 void print_error_and_exit(char *msg)
 {
@@ -52,6 +53,9 @@ int main(int argc, char *argv[]) {
     float loss_probability;
     int random_seed;
     char rcv_buffer[SEGMENT_SIZE+HEADER_SIZE];
+    int serv_name_size;
+    char type;
+
 
     /*  Get port number from the command line, and
         set to default port if no arguments were supplied  */
@@ -109,15 +113,18 @@ int main(int argc, char *argv[]) {
     char pkt_serial = '0';
     
     int payload_size;
+    char* serv_name;
 
-    char* rcv_data = (char*) malloc(10);
-    char* rcv_ptr = rcv_data;
+    unsigned char* rcv_data = (unsigned char*) malloc(10);
+    unsigned char* rcv_ptr = rcv_data;
     int i = 0;
+
+    char curr_seq = '0';
     
     /*  Enter an infinite loop to respond
         to client requests and echo input  */
 
-    while ( 1 ) {
+    while ( pkt_serial != '1' ) {
 
 	/*  Wait for a connection, then accept() it  
 
@@ -134,19 +141,43 @@ int main(int argc, char *argv[]) {
     
 
 	if ((n = recvfrom(list_s, rcv_buffer, SEGMENT_SIZE+HEADER_SIZE, 0, (struct sockaddr *)&servaddr, &len_servaddr) > 0)) {
-        memcpy(&payload_size, rcv_buffer+1, 4);
-        // printf("Payload size: %d,  i: %d\n", payload_size, i);
-        rcv_data = (char*) realloc(rcv_data, i+payload_size);
-
-        rcv_ptr = rcv_data+i;
-
+       
         memcpy(&seq_num, rcv_buffer, 1);
-        memcpy(rcv_ptr, rcv_buffer+6, payload_size);
-
-        memcpy(&pkt_serial, rcv_buffer+5, 1);
 
         printf("Packet %c received \n", seq_num);
 
+        if (curr_seq == seq_num) {
+            memcpy(&pkt_serial, rcv_buffer+5, 1);
+
+            if (pkt_serial == 'i') {
+                memcpy(&type, rcv_buffer+6, 1);
+                memcpy(&serv_name_size, rcv_buffer+7, 4);
+
+                serv_name = (char*) malloc (serv_name_size);
+                memcpy(serv_name, rcv_buffer+11, serv_name_size);
+
+                // printf("Type %c\n", type);
+                // printf("Server file name %s\n", serv_name);
+            } else {
+                memcpy(&payload_size, rcv_buffer+1, 4);
+            // printf("Payload size: %d,  i: %d\n", payload_size, i);
+                rcv_data = (unsigned char*) realloc(rcv_data, i+payload_size);
+                rcv_ptr = rcv_data+i;
+                
+                memcpy(rcv_ptr, rcv_buffer+6, payload_size);
+            }
+
+            i += payload_size;
+
+            if (curr_seq == '0')
+                curr_seq = '1';
+            else
+                curr_seq = '0';
+
+        } 
+
+
+        // printf("Payload size is %d\n", payload_size);
         
         if ((n = lossy_sendto(loss_probability, random_seed, list_s, &seq_num, 1, (struct sockaddr *)&servaddr, sizeof(servaddr))) < 0) 
         {
@@ -154,7 +185,7 @@ int main(int argc, char *argv[]) {
         } 
         //printf("ACK %c sent\n", seq_num);
 
-        i += payload_size;
+       
     }
 
 
@@ -169,7 +200,7 @@ int main(int argc, char *argv[]) {
 
     printf("Total data size: %d\n", i);
 
-    writeToFile(rcv_data, i);
+    convertAndWriteToFile(rcv_data, i, serv_name, type);
 
     // for (int j=0; j<i; j++) {
     //     printf("%c\n", rcv_data[j]);
@@ -182,33 +213,24 @@ int main(int argc, char *argv[]) {
 
 
 
-void writeToFile(char* buffer, int length) {
+void convertAndWriteToFile(unsigned char* data, int length, char* filename, char type) {
 
     FILE *ptr;
     // unsigned char write_buffer[1];
 
-    ptr=fopen("target","wb");                      // Reading file in binary
+    //printf("Length of file %d\n", length);
 
-    /*  If error in reading file  */
+    int buffer[length];
 
-    if (!ptr) { 
-        print_error_and_exit("Unable to open file!");     
+    for (int i=0; i<length; i++) {
+        buffer[i] = data[i];
+        printf("%u ", buffer[i]);
     }
 
-    /*  Checking the file length if it doesn't exceed 1000 bytes  */
+    printf("\n");
 
-    // fseek(ptr, 0, SEEK_END);
-    // int lengthOfFile = ftell(ptr);
-    // rewind(ptr);
-
-    fwrite(buffer, length, 1, ptr);
-
-    // int count = 0;
-
-    // while (fread(read_buffer,sizeof(read_buffer),1,ptr) != 0) {
-    //     // Saving the file buffer into data array
-    //     buffer[count] = read_buffer[0];
-    //     count += 1;
-    // }
+    int status = convert(filename, &type, buffer, length, 0);
+    printf("Status %d\n", status);
+    // ptr=fopen("target","wb");                      // Reading file in binary
 
 }
