@@ -188,11 +188,13 @@ int main(int argc, char *argv[]) {
                 /*  add the payload to rcv_data. */
 
                 memcpy(rcv_ptr, rcv_buffer+6, payload_size);
+
+                 i += payload_size;
             }
 
             /*  Increasing buffer position by packet size. */
 
-            i += payload_size;
+           
 
             /*  Changing the curr_seq num for expected sequence. */
 
@@ -210,7 +212,7 @@ int main(int argc, char *argv[]) {
             /*  Calling the convert function. */
             file_save_status = convertAndWriteToFile(rcv_data, i, serv_name, type);
             // printf("File save status %d\n", file_save_status);
-            /*  Creating sequence num for status. */.
+            /*  Creating sequence num for status. */
             if (file_save_status == 0) {
                 seq_num = 'f';
                 printf("Format Error\n");

@@ -17,6 +17,8 @@ ssize_t lossy_sendto (float loss_ratio, unsigned int random_seed, int sockfd, co
   }
   
   f = ((float) rand ()) / RAND_MAX;
+
+  //printf("Loss: %f\n", f);
   
   /* Simulate segment loss */
   if (f < loss_ratio) return len;

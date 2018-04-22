@@ -24,10 +24,10 @@
 
 /*  Global constants  */
 
-#define MAX_LINE           (1000)
+#define MAX_LINE           (200000)
 #define SEGMENT_SIZE       (20)
 #define HEADER_SIZE        (6)
-#define TIMEOUT            (500000)       //50 millisecond
+#define TIMEOUT            (50000)       //50 millisecond
 
 
 /*  Function declarations  */
@@ -134,6 +134,7 @@ int main(int argc, char *argv[]) {
     }
 
     */
+
 
     /*  reading from the file to the buffer.  */
 
